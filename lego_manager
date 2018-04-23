@@ -1,0 +1,268 @@
+#! /usr/bin/python
+import sets
+import config
+import json
+import parts
+import urwid
+import operator
+import csv
+import colors
+
+log = config.get_logger("main")
+
+per_page = 10
+offset = 0
+my_sets = None
+main = None
+tot_pages = 0
+max_offset = 0
+
+history_stack = []
+
+
+# "Caches"
+parts_overview_cache = None
+sorted_parts_per_category = {}
+sorted_cat_set = {}
+
+
+class MyEncoder(json.JSONEncoder):
+    def default(self, o):
+        return o.__dict__
+
+
+def intro_screen():
+    title = "Welcome to LEGO Manager"
+    return urwid.Padding(menu(title, [
+                                        ("Set Browser", render(set_listing_screen)),
+                                        ("Part Browser", render(part_listing_screen)),
+                                        ("Storage Category Browser", render(part_category_screen)),
+                                        ("Export Category Part Listing", render(export_category_part_listing)),
+                                        ("Quit", exit_program)
+                                     ]), left=2, right=2)
+
+
+def render(s):
+    def internal(selected, button=None):
+        global history_stack
+        history_stack.append(main.original_widget)
+        main.original_widget = s(selected, button)
+        log.debug(len(history_stack))
+    return internal
+
+
+def back():
+    global history_stack
+    if len(history_stack) == 0:
+        return
+    widget = history_stack.pop()
+    log.debug(widget)
+    main.original_widget = widget
+    log.debug(len(history_stack))
+
+
+def set_listing_screen(selected, button):
+    return urwid.Padding(menu("My Sets", [(s, render(set_detail_screen)) for s in get_my_sets()]), left=2, right=2)
+
+
+def get_parts_overview():
+    global parts_overview_cache
+    if not parts_overview_cache:
+        parts_overview_cache = parts.get_all_for_sets(get_my_sets())
+    return parts_overview_cache
+
+
+def get_my_sets():
+    global my_sets, tot_pages, max_offset
+    if my_sets is None:
+        log.info("fetching my sets")
+        my_sets = sets.get_all_my_sets()
+        tot_pages = int(len(my_sets) / per_page)
+        if tot_pages % per_page > 0:
+            tot_pages = tot_pages + 1
+        max_offset = tot_pages * per_page
+    return my_sets
+
+
+
+def part_listing_screen(selected, button=None):
+    parts_overview = get_parts_overview()
+    log.info("fetched parts")
+    sorted_part_nums = sorted(parts_overview["parts"].keys())
+    log.info("sorted parts")
+    title = "Part Browser (%s parts total)" % parts_overview["total_count"]
+    body = [urwid.Text(title), urwid.Divider()]
+    for single_part_num in sorted_part_nums:
+        single_part = parts_overview["parts"][single_part_num]
+        button = urwid.Button("%s (%s)" % (single_part["part"].part_num, single_part["count"]))
+        urwid.connect_signal(button, "click", render(part_detail_screen), user_args=[single_part]),
+        body.append(urwid.AttrMap(button, None, focus_map="reversed"))
+    log.info("finished fetching parts")
+    return urwid.ListBox(urwid.SimpleFocusListWalker(body))
+
+
+def get_part_count_for_category(category):
+    parts_in_category = category.get_parts()
+    parts_in_sets = get_parts_overview()["parts"]
+    global sorted_parts_per_category
+    if category not in sorted_parts_per_category:
+        def get_count(part_num, type):
+            return 0 if part.part_num not in parts_in_sets else parts_in_sets[part.part_num][type]
+        part_count_sorted = sorted(
+            filter(lambda x: x[1] > 0,
+                   [(part, get_count(part.part_num, "count"), get_count(part.part_num, "display"), get_count(part.part_num, "storage")) for part in parts_in_category]),
+            key=lambda x: x[3],
+            reverse=True)
+        sorted_parts_per_category[category] = part_count_sorted
+    return sorted_parts_per_category[category]
+
+
+def parts_in_category_screen(category, button=None):
+    body = [urwid.Text("Viewing parts for category %s" % category.name), urwid.Divider()]
+    part_count_sorted = get_part_count_for_category(category)
+    for part in part_count_sorted:
+        button = urwid.Button("[s {:>3}] [{:>15}] {}".format(part[3], part[0].part_num, part[0].name))
+        body.append(urwid.AttrMap(button, None, focus_map="reversed"))
+    return urwid.ListBox(urwid.SimpleFocusListWalker(body))
+
+
+def get_sorted_category_set():
+    global sorted_cat_set
+    if not sorted_cat_set:
+        parts_overview = get_parts_overview()
+        cat_set = {}
+        for part_num, part_info in parts_overview["parts"].iteritems():
+            cat = part_info["part"].get_category()
+            if cat not in cat_set:
+                cat_set[cat] = 0
+            cat_set[cat] = cat_set[cat] + part_info["storage"]
+        sorted_cat_set = sorted(cat_set.items(), key=operator.itemgetter(1), reverse=True)
+    return sorted_cat_set
+
+
+def part_category_screen(selected, button=None):
+    title = "Part Category Browser"
+    body = [urwid.Text(title), urwid.Divider()]
+    cat_set = get_sorted_category_set()
+    for cat, count in cat_set:
+        button = urwid.Button("{} ({})".format(cat.name, count))
+        urwid.connect_signal(button, "click", render(parts_in_category_screen), user_args=[cat])
+        body.append(urwid.AttrMap(button, None, focus_map="reversed"))
+    return urwid.ListBox(urwid.SimpleFocusListWalker(body))
+
+
+def export_category_part_listing(selected, button=None):
+    cat_set = get_sorted_category_set()
+    c = []
+    for cat, count in cat_set:
+        ps = get_part_count_for_category(cat)
+        for p in ps:
+            c.append({"category": cat.name, "part_num": p[0].name, "part_name": p[0].part_num, "thumbnail": p[0].thumbnail, "total": p[1], "display": p[2], "storage": p[3]})
+
+    log.info("number of parts: %s" % len(c))
+    log.info(str(c))
+    with open("cat_parts.csv", "w") as csvfile:
+        fieldnames = ["category", "part_num", "part_name", "thumbnail", "total", "display", "storage"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for line in c:
+            writer.writerow(line)
+
+    items_in_pile = [
+        urwid.Text(["Exported!"])
+    ]
+    done = urwid.Button("Ok")
+    urwid.connect_signal(done, "click", render(intro_screen))
+    items_in_pile.append(urwid.AttrMap(done, None, focus_map="reversed"))
+    return urwid.Filler(urwid.Pile(items_in_pile))
+
+
+def part_detail_screen(selected_part_info, button=None):
+    selected_part = selected_part_info["part"]
+    total_count = selected_part_info["count"]
+    on_display = selected_part_info["display"]
+    in_storage = selected_part_info["storage"]
+
+    items_in_pile = [
+        urwid.Text(["Name              :  ", selected_part.name]),
+        urwid.Text(["Number            :  ", selected_part.part_num]),
+        urwid.Text(["Category          :  ", selected_part.get_category().name]),
+        urwid.Divider(),
+        urwid.Text(["Total Owned       :  ", str(total_count)]),
+        urwid.Text(["   {:3d}  ".format(on_display), "   On Display"]),
+        urwid.Text(["   {:3d}  ".format(in_storage), "   In Storage"]),
+        urwid.Divider(),
+        urwid.Text("Color breakdown"),
+        urwid.Text("  Display  Storage  Color")
+    ]
+    for color_id, counts in selected_part_info["colors"].iteritems():
+        color = colors.from_id(color_id)
+        quantity_str = "    {:3d}      {:3d}  ".format(counts["display"], counts["storage"])
+        naming = "  (%s) %s" % (str(color.id), color.name)
+        items_in_pile.append(urwid.Text([quantity_str, naming]))
+    items_in_pile.append(urwid.Divider())
+
+    done = urwid.Button("Ok")
+    urwid.connect_signal(done, "click", render(part_listing_screen))
+    items_in_pile.append(urwid.AttrMap(done, None, focus_map="reversed"))
+    return urwid.Filler(urwid.Pile(items_in_pile))
+
+
+def menu(title, choices):
+    body = [urwid.Text(title), urwid.Divider()]
+    for item, action in choices:
+        name = item if isinstance(item, str) else item.name
+        button = urwid.Button(name)
+        urwid.connect_signal(button, "click", action, user_args=[item])
+        body.append(urwid.AttrMap(button, None, focus_map="reversed"))
+    return urwid.ListBox(urwid.SimpleFocusListWalker(body))
+
+
+def set_detail_screen(selected_set, button):
+    items_in_pile = [
+        urwid.Text(["Name         :  ", selected_set.name]),
+        urwid.Text(["Number       :  ", selected_set.num]),
+        urwid.Text(["Theme        :  ", selected_set.get_theme().name]),
+        urwid.Text(["On Display   :  ", "yes" if selected_set.is_on_display() else "no"]),
+        urwid.Text(["Total pieces :  ", str(selected_set.get_inventory().get_total_part_count())])
+    ]
+    done = urwid.Button("Ok")
+    urwid.connect_signal(done, "click", render(set_listing_screen))
+    items_in_pile.append(urwid.AttrMap(done, None, focus_map="reversed"))
+    return urwid.Filler(urwid.Pile(items_in_pile))
+
+
+def item_chosen(choice, button):
+    config.get_logger("foo").debug(button)
+    config.get_logger("foo").debug(choice)
+    response = urwid.Text([u'You chose ', choice.name, u'\n'])
+    done = urwid.Button(u'Ok')
+    urwid.connect_signal(done, 'click', exit_program)
+    main.original_widget = urwid.Filler(urwid.Pile([response,
+                                                    urwid.AttrMap(done, None, focus_map="reversed")]))
+
+
+def exit_program(button=None, choice=None):
+    raise urwid.ExitMainLoop()
+
+
+def unhandled_input(key):
+    if key in ('q', 'Q'):
+        exit_program()
+    elif key in ('esc',):
+        config.get_logger('main').debug('hello')
+        back()
+
+
+def do_main():
+    global main
+    main = intro_screen()
+    top = urwid.Overlay(main, urwid.SolidFill(u'\N{MEDIUM SHADE}'),
+                        align="center", width=("relative", 60),
+                        valign="middle", height=("relative", 60),
+                        min_width=20, min_height=9)
+    urwid.MainLoop(top, palette=[("reversed", "standout", "")], unhandled_input=unhandled_input).run()
+
+
+if __name__ == "__main__":
+    do_main()
