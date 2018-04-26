@@ -22,6 +22,26 @@ class Part(object):
             self.category = category_from_id(self.category_id)
         return self.category
 
+    keys_to_replace = {
+        'part_num': 'partNum',
+        'category_id': 'categoryId',
+    }
+
+    keys_to_ignore = [
+        'category'
+    ]
+
+    def to_json(self):
+        json_obj = {}
+        for k in self.__dict__:
+            if k in self.keys_to_ignore:
+                continue
+            if k in self.keys_to_replace:
+                json_obj[self.keys_to_replace[k]] = self.__dict__[k]
+            else:
+                json_obj[k] = self.__dict__[k]
+        return json_obj
+
 
 class InventoryPart(object):
     def __init__(self, data, part):
@@ -92,25 +112,27 @@ def for_category_id(category_id):
 
 
 def get_all_for_sets(sets):
-    parts = {
-        "total_count": 0,
-        "parts": {}
-    }
-    for s in sets:
-        set_parts = s.get_inventory().inventory_parts
-        for sp in set_parts:
-            part_num = sp.part.part_num
-            if part_num not in parts["parts"]:
-                parts["parts"][part_num] = {"part": sp.part, "count": 0, "display": 0, "storage": 0, "colors": {}}
-            parts["parts"][part_num]["count"] += sp.quantity
+    def fetch_parts():
+        parts = {
+            "total_count": 0,
+            "parts": {}
+        }
+        for s in sets:
+            set_parts = s.get_inventory().inventory_parts
+            for sp in set_parts:
+                part_num = sp.part.part_num
+                if part_num not in parts["parts"]:
+                    parts["parts"][part_num] = {"part": sp.part, "count": 0, "display": 0, "storage": 0, "colors": {}}
+                parts["parts"][part_num]["count"] += sp.quantity
 
-            display_key = "display" if s.is_on_display() else "storage"
-            parts["parts"][part_num][display_key] += sp.quantity
+                display_key = "display" if s.is_on_display() else "storage"
+                parts["parts"][part_num][display_key] += sp.quantity
 
-            color_id = str(sp.color_id)
-            if color_id not in parts["parts"][part_num]["colors"]:
-                parts["parts"][part_num]["colors"][color_id] = {"display": 0, "storage": 0}
-            parts["parts"][part_num]["colors"][color_id][display_key] += sp.quantity
+                color_id = str(sp.color_id)
+                if color_id not in parts["parts"][part_num]["colors"]:
+                    parts["parts"][part_num]["colors"][color_id] = {"display": 0, "storage": 0}
+                parts["parts"][part_num]["colors"][color_id][display_key] += sp.quantity
 
-            parts["total_count"] += sp.quantity
-    return parts
+                parts["total_count"] += sp.quantity
+        return parts
+    return cache.remember("parts", "all_for_my_sets", fetch_parts)

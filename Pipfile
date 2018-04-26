@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+certifi = "==2018.1.18"
+futures = "==3.2.0"
+lxml = "==4.1.1"
+singledispatch = "==3.4.0.3"
+six = "==1.11.0"
+tornado = "==5.0.2"
+urwid = "==2.0.1"
+backports_abc = "==0.5"
+requests = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "2.7"

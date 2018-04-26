@@ -65,13 +65,6 @@ def set_listing_screen(selected, button):
     return urwid.Padding(menu("My Sets", [(s, render(set_detail_screen)) for s in get_my_sets()]), left=2, right=2)
 
 
-def get_parts_overview():
-    global parts_overview_cache
-    if not parts_overview_cache:
-        parts_overview_cache = parts.get_all_for_sets(get_my_sets())
-    return parts_overview_cache
-
-
 def get_my_sets():
     global my_sets, tot_pages, max_offset
     if my_sets is None:
@@ -84,9 +77,8 @@ def get_my_sets():
     return my_sets
 
 
-
 def part_listing_screen(selected, button=None):
-    parts_overview = get_parts_overview()
+    parts_overview = parts.get_all_for_sets(get_my_sets())
     log.info("fetched parts")
     sorted_part_nums = sorted(parts_overview["parts"].keys())
     log.info("sorted parts")
@@ -109,8 +101,14 @@ def get_part_count_for_category(category):
         def get_count(part_num, type):
             return 0 if part.part_num not in parts_in_sets else parts_in_sets[part.part_num][type]
         part_count_sorted = sorted(
-            filter(lambda x: x[1] > 0,
-                   [(part, get_count(part.part_num, "count"), get_count(part.part_num, "display"), get_count(part.part_num, "storage")) for part in parts_in_category]),
+            filter(lambda x: x[1] > 0, [
+                    (
+                        part, get_count(part.part_num, "count"),
+                        get_count(part.part_num, "display"),
+                        get_count(part.part_num, "storage")
+                    )
+                    for part in parts_in_category
+                ]),
             key=lambda x: x[3],
             reverse=True)
         sorted_parts_per_category[category] = part_count_sorted

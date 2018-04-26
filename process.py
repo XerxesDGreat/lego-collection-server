@@ -8,20 +8,28 @@ read_file_name = '/Users/josh/Downloads/ucs_atat_parts.csv'
 write_file_name = '/Users/josh/Downloads/ucs_atat_parts_edited.csv'
 edited_rows = []
 
+all_parts = parts.get_all_for_sets(sets.get_all_my_sets())['parts']
+
+print(len(all_parts))
+
 with open(read_file_name) as csvfile:
     reader = csv.DictReader(csvfile)
     for row in reader:
-        part = row['Part']
-        color = int(row['Color'])
-        print ("%s: %s" % (part, color))
-        all_sets_with_part = sets.get_all_my_sets_containing_part(part, color)
+        part_num = row['Part']
+        color_num = row['Color']
         row['On Display'] = 0
         row['Says I have'] = 0
-        for myset in all_sets_with_part:
-            if myset.is_on_display():
-                row['On Display'] += myset.quantity_owned
+        if part_num in all_parts:
+            part = all_parts[part_num]
+            if color_num in part['colors']:
+                color = part['colors'][color_num]
+                print("part: %s, color: %s, display: %s, storage: %s" % (part_num, color, color['display'], color['storage']))
+                row['On Display'] = color['display']
+                row['Says I have'] = color['storage']
             else:
-                row['Says I have'] += myset.quantity_owned
+                print("no color %s for part %s" % (color, part_num))
+        else:
+            print("no part %s" % part_num)
 
         edited_rows.append(row)
 

@@ -2,6 +2,8 @@ import config
 
 cache = {}
 
+log = config.get_logger('cache')
+
 
 def remember(group, key, operation):
     if group not in cache:

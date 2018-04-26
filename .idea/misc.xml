@@ -1,19 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="ComposerJsonPluginSettings">
-    <unboundedVersionInspectionSettings>
-      <excludedPackages />
-    </unboundedVersionInspectionSettings>
-    <customRepositories />
+  <component name="JavaScriptSettings">
+    <option name="languageLevel" value="JSX" />
   </component>
-  <component name="JsBowerSettings">
-    <exe-path>/usr/local/bin/bower</exe-path>
-    <config-path>$USER_HOME$/dev/experiment-frontend/bower.json</config-path>
-  </component>
-  <component name="ProjectRootManager" version="2" languageLevel="JDK_1_6" default="false" project-jdk-name="LEGO Python 2.7.10 ve" project-jdk-type="Python SDK">
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_1_8" default="false" project-jdk-name="Python 2.7 (lego-collection-server)" project-jdk-type="Python SDK">
     <output url="file://$PROJECT_DIR$/out" />
-  </component>
-  <component name="PythonCompatibilityInspectionAdvertiser">
-    <option name="version" value="2" />
   </component>
 </project>

@@ -9,6 +9,7 @@ db_conn = db.get_instance()
 
 query_by_id = "SELECT s.*, ms.display, ms.quantity FROM sets s, my_sets ms WHERE set_num=:set_num AND s.set_num = ms.set_number"
 query_all_my_sets = "SELECT s.*, ms.quantity, ms.display FROM sets s, my_sets ms WHERE s.set_num = ms.set_number"
+query_update_my_set = "UPDATE my_sets SET display = :display, quantity = :quantity WHERE set_number=:set_num"
 query_all_my_sets_containing_part = """SELECT s.*, s.display, ip.color_id, s.quantity
 FROM (
     select s.*, ms.display, ms.quantity from sets s, my_sets ms
@@ -35,12 +36,31 @@ class Set(object):
         self.quantity_owned = data["quantity"]
         self.inventory = None
 
+    keys_to_replace = {
+        'theme_id': 'themeId',
+        'num_parts': 'numParts',
+        'on_display': 'onDisplay',
+        'quantity_owned': 'quantityOwned'
+    }
+
+    keys_to_ignore = [
+        'inventory'
+    ]
+
     def to_json(self):
-        starter = self.__dict__
-        if 'inventory' in starter:
-            starter.pop('inventory')
-        #starter['name'] = starter['name'].decode('utf-8')
-        return starter
+        json_obj = {}
+        for k in self.__dict__:
+            if k in self.keys_to_ignore:
+                continue
+            if k in self.keys_to_replace:
+                json_obj[self.keys_to_replace[k]] = self.__dict__[k]
+            else:
+                json_obj[k] = self.__dict__[k]
+        return json_obj
+
+    def update_from_json(self, data):
+        self.on_display = data.get('on_display', self.on_display)
+        self.quantity_owned = data.get('quantity_owned', self.quantity_owned)
     
     def get_theme(self):
         return themes.from_id(self.theme_id)
@@ -55,6 +75,16 @@ class Set(object):
         config.get_logger("sets").info("latest inventory id: %s" % latest_inventory_id)
         self.inventory = parts.for_inventory_id(latest_inventory_id)
         return self.inventory
+
+    def save(self):
+        query_args = {
+            "set_num": self.num,
+            "display": "t" if self.on_display else "f",
+            "quantity": self.quantity_owned
+        }
+        log.info(query_args)
+        db_conn.query_no_return(query_update_my_set, query_args)
+        db_conn.commit()
 
 
 def from_set_num(set_num):
