@@ -1,6 +1,5 @@
 backports-abc==0.5
 certifi==2018.1.18
-futures==3.2.0
 lxml==4.1.1
 singledispatch==3.4.0.3
 six==1.11.0

@@ -3,7 +3,9 @@ import config
 import cache
 
 log = config.get_logger('themes')
+log.info('gonna get instance')
 db_conn = db.get_instance()
+log.info('got instance')
 
 class Theme(object):
     delim = " > "

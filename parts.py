@@ -4,12 +4,28 @@ import cache
 db_conn = db.get_instance()
 
 query_category_by_id = "SELECT * FROM part_categories WHERE id=:id"
-query_part_by_id = "SELECT * FROM parts WHERE part_cat_id=:id"
 query_by_inventory_id = "SELECT * FROM inventory_parts ip, parts p where ip.part_num = p.part_num and ip.inventory_id=:inventory_id"
 query_by_category_id = "SELECT * FROM parts WHERE part_cat_id=:cat_id"
+query_all_part_categories = "SELECT * FROM part_categories ORDER BY name"
 
 
-class Part(object):
+class Jsonable(object):
+    keys_to_replace = {}
+    keys_to_ignore = []
+
+    def to_json(self):
+        json_obj = {}
+        for k in self.__dict__:
+            if k in self.keys_to_ignore:
+                continue
+            if k in self.keys_to_replace:
+                json_obj[self.keys_to_replace[k]] = self.__dict__[k]
+            else:
+                json_obj[k] = self.__dict__[k]
+        return json_obj
+
+
+class Part(Jsonable):
     def __init__(self, data):
         self.part_num = data["part_num"]
         self.name = data["name"]
@@ -31,19 +47,8 @@ class Part(object):
         'category'
     ]
 
-    def to_json(self):
-        json_obj = {}
-        for k in self.__dict__:
-            if k in self.keys_to_ignore:
-                continue
-            if k in self.keys_to_replace:
-                json_obj[self.keys_to_replace[k]] = self.__dict__[k]
-            else:
-                json_obj[k] = self.__dict__[k]
-        return json_obj
 
-
-class InventoryPart(object):
+class InventoryPart:
     def __init__(self, data, part):
         self.inventory_id = data["inventory_id"]
         self.part = part
@@ -52,7 +57,7 @@ class InventoryPart(object):
         self.is_spare = data["is_spare"] == "t"
 
 
-class Inventory(object):
+class Inventory:
     def __init__(self, inventory_parts):
         self.inventory_parts = inventory_parts
         self.part_categories = None
@@ -73,28 +78,33 @@ class Inventory(object):
         return self.part_categories
 
 
-class PartCategory(object):
+class PartCategory(Jsonable):
     def __init__(self, data):
         self.id = data["id"]
         self.name = data["name"]
         self.parts = None
 
+    keys_to_ignore = [
+        'parts'
+    ]
+
     def get_parts(self):
         if not self.parts:
-            self.parts = for_category_id(self.id)
+            self.parts = get_all_for_category_id(self.id)
         return self.parts
+
+
+def get_all_categories():
+    def create():
+        results = db_conn.query(query_all_part_categories)
+        return [PartCategory(r) for r in results]
+    return cache.remember("part_category", "all", create)
 
 
 def category_from_id(id):
     def create():
         return PartCategory(db_conn.query_one(query_category_by_id, {"id": id}))
     return cache.remember("part_category", id, create)
-
-
-def part_from_id(id):
-    def create():
-        return Part(db_conn.query_one(query_part_by_id, {"id": id}))
-    return cache.remember("part", id, create)
 
 
 def for_inventory_id(inventory_id):
@@ -104,7 +114,7 @@ def for_inventory_id(inventory_id):
     return cache.remember("inventory_part_list", inventory_id, create)
 
 
-def for_category_id(category_id):
+def get_all_for_category_id(category_id):
     def create():
         results = db_conn.query(query_by_category_id, {"cat_id": category_id})
         return [Part(r) for r in results]

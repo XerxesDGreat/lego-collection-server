@@ -79,7 +79,7 @@ class MyPartsHandler(AppRequestHandler):
             "parts": {}
         }
 
-        for part_num, part_info in my_parts['parts'].iteritems():
+        for part_num, part_info in my_parts['parts'].items():
             response_part = part_info['part'].to_json()
             for key in ['count', 'colors', 'storage', 'display']:
                 response_part[key] = part_info[key]
@@ -88,12 +88,35 @@ class MyPartsHandler(AppRequestHandler):
         self.write({'data': response})
 
 
+class PartCategoriesHandler(AppRequestHandler):
+    def get(self):
+        part_categories = parts.get_all_categories()
+        self.write({'data': [pc.to_json() for pc in part_categories]})
+
+
+class PartCategoryHandler(AppRequestHandler):
+    def get(self, id):
+        part_category = parts.category_from_id(id)
+        cat_json = part_category.to_json()
+        cat_json['num_parts'] = len(part_category.get_parts())
+        self.write({'data': cat_json})
+
+
+class PartsByCategoryHandler(AppRequestHandler):
+    def get(self, id):
+        cat_parts = parts.get_all_for_category_id(id)
+        self.write({'data': [p.to_json() for p in cat_parts]})
+
+
 def make_app():
     return tornado.web.Application([
         (r'/', MainHandler),
-        (r'/sets/?', MySetsHandler),
+        (r'/models/?', MySetsHandler),
         (r'/sets/(.*)', SetDetailHandler),
-        (r'/parts/?', MyPartsHandler)
+        (r'/parts/?', MyPartsHandler),
+        (r'/part-categories/?', PartCategoriesHandler),
+        (r'/part-categories/([0-9]+)/?', PartCategoryHandler),
+        (r'/part-categories/([0-9]+)/parts', PartsByCategoryHandler)
     ])
 
 

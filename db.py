@@ -129,7 +129,8 @@ class DB(object):
         self.dbconn.commit()
 
     def run_fixtures(self):
-        for table_name, meta in self.base_tables.iteritems():
+        self.log.info("running fixtures")
+        for table_name, meta in self.base_tables.items():
             self.log.info("verifying table %s", table_name)
             if not self.table_exists(table_name):
                 self.log.info("creating table %s", table_name)
@@ -190,7 +191,7 @@ class DB(object):
 
         def row_generator():
             for r in rows:
-                print r
+                print (r)
                 yield tuple(r.values())
     
         def table_update_operations():
